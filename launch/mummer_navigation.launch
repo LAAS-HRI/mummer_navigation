@@ -1,0 +1,7 @@
+<launch>
+  <node name="tf2hanp" pkg="tf_hanp" type="tf_hanp_node.py" output="screen" />
+
+  <include file="$(find laas_navigation)/pepper_launch/pepper_locate_nav.launch" />
+
+  <node name="mummer_navigation" pkg="mummer_navigation" type="mummer_navigation_node.py" output="screen"/>
+</launch>
