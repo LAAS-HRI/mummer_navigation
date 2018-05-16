@@ -4,7 +4,7 @@
   <include file="$(find laas_navigation)/pepper_launch/pepper_locate_nav.launch" />
 
   <node name="laser_extender" pkg="topic_tools" type="transform" 
-    args="/naoqi_driver_node/laser /navigation/extended_laser sensor_msgs/LaserScan 'sensor_msgs.msg.LaserScan(header = m.header, angle_min = m.angle_min, angle_max=m.angle_max, angle_increment=m.angle_increment, time_increment=m.time_increment, scan_time=m.scan_time, range_min=m.range_min, range_max=m.range_max, ranges = [r if r > 0 else 4.9 for r in m.ranges], intensities=m.intensities)' --import sensor_msgs" />
+    args="/naoqi_driver_node/laser /navigation/extended_laser sensor_msgs/LaserScan 'sensor_msgs.msg.LaserScan(header = m.header, angle_min = m.angle_min, angle_max=m.angle_max, angle_increment=m.angle_increment, time_increment=m.time_increment, scan_time=m.scan_time, range_min=m.range_min, range_max=8.0, ranges = [r if r > 0 else 7.9 for r in m.ranges], intensities=m.intensities)' --import sensor_msgs" />
 
   <node name="mummer_navigation" pkg="mummer_navigation" type="mummer_navigation_node.py" output="screen"/>
 
