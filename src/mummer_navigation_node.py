@@ -16,11 +16,13 @@ from actionlib_msgs.msg import GoalStatus
 
 from std_srvs.srv import SetBool
 from perspectives_msgs.srv import StartFact, EndFact
-from geometry_msgs.msg import Twist, PoseStamped
+from geometry_msgs.msg import Twist, PoseStamped, TransformStamped
 
 import signal
 
 from naoqi import ALProxy
+
+import time
 
 NODE_NAME = "mummer_navigation_node"
 MOVE_TO_AS_NAME = "m_move_to"
@@ -86,7 +88,7 @@ class NavigationMummerAction(object):
         # helper variables
         self._move_base_as_recfg_client.update_configuration({"use_human_robot_visi_c": False, "planning_mode": 1,
                                                               "use_human_robot_ttc_c": False,
-                                                              "yaw_goal_tolerance": 2.0, "xy_goal_tolerance": 0.8})
+                                                              "yaw_goal_tolerance": 2.0, "xy_goal_tolerance": 0.5})
 
         if goal.target_pose.header.frame_id != "map":
             goal.target_pose = self.tf_listener.transformPose("map", goal.target_pose)
@@ -130,11 +132,12 @@ class NavigationMummerAction(object):
                 break
             r_pose, _ = self.tf_listener.lookupTransform("base_footprint", "map", rospy.Time(0))
             d = math.hypot(goal_2d.target_pose.pose.position.x - r_pose[0],
-                                       goal_2d.target_pose.pose.position.y - r_pose[1])
+                            goal_2d.target_pose.pose.position.y - r_pose[1])
+            rospy.loginfo_throttle(1, "[mummer_navigation] distance : {}, old_distance : {}".format(d, last_distance))
             if d < last_distance:
                 last_decrease_time = rospy.Time.now()
                 last_distance = d
-            if rospy.Time.now() - last_decrease_time >= rospy.Duration(5):
+            elif rospy.Time.now() - last_decrease_time >= rospy.Duration(9000):
                 self.move_base_as.cancel_all_goals()
                 self.need_final_rotation = True
                 break
@@ -144,16 +147,25 @@ class NavigationMummerAction(object):
 
         robot_t, robot_r = self.tf_listener.lookupTransform("base_footprint", "map", rospy.Time(0))
         _, _, yaw_r = t.euler_from_quaternion(robot_r)
-        if self.need_final_rotation and abs(math.atan2(math.sin(yaw - yaw_r), math.cos(yaw - yaw_r))) > 0.2:
+        self.need_final_rotation = True
+        rospy.loginfo(NODE_NAME + " final rotation needed : {}, angle wanted : {}, angle : {}, diff : {}".format(
+            self.need_final_rotation, yaw, yaw_r, abs(yaw-yaw_r)
+        ))
+        if self.need_final_rotation and abs(((yaw - yaw_r) + math.pi) % math.pi * 2 - math.pi) > -1:
             rospy.loginfo(NODE_NAME + " now doing final rotation")
             try:
                 self.al_motion.moveTo(0, 0, yaw)
             except RuntimeError as e:
+                rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
                 self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
+                self.al_motion.moveTo(0, 0, yaw)
 
         self.need_final_rotation = False
 
+        time.sleep(1.0)
+
         self.as_move_to.set_succeeded()
+        rospy.loginfo(NODE_NAME + " Action server succeeded !")
 
         resp = self.toggle_human_monitor(True)
 
@@ -215,7 +227,7 @@ class NavigationMummerAction(object):
 
         self._move_base_as_recfg_client.update_configuration({"use_human_robot_visi_c": True, "planning_mode": 2,
                                                               "approach_id": id, "approach_dist": d,
-                                                              "approach_angle": a, "yaw_goal_tolerance": 0.1, "xy_goal_tolerance": 0.8})
+                                                              "approach_angle": a, "yaw_goal_tolerance": 0.1, "xy_goal_tolerance": 0.5})
 
         resp = self.toggle_human_monitor(False)
         if not resp.success:
