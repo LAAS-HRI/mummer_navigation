@@ -1,28 +1,22 @@
 #! /usr/bin/env python
 import math
-import rospy
+import re
+import signal
+import time
 
 import actionlib
-
 import dynamic_reconfigure.client as dyncfg
-
-import re
+import rospy
 import tf
 import tf.transformations as t
-
-from move_base_msgs.msg import MoveBaseResult, MoveBaseAction, MoveBaseActionGoal, MoveBaseGoal
-
 from actionlib_msgs.msg import GoalStatus
-
-from std_srvs.srv import SetBool
-from perspectives_msgs.srv import StartFact, EndFact
-from geometry_msgs.msg import Twist, PoseStamped, TransformStamped
-
-import signal
-
+from geometry_msgs.msg import Twist, PoseStamped
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from mummer_navigation.msg import RotateGoal, RotateAction
 from naoqi import ALProxy
-
-import time
+from perspectives_msgs.srv import StartFact, EndFact
+from std_srvs.srv import SetBool
+from multiprocessing import Lock
 
 NODE_NAME = "mummer_navigation_node"
 MOVE_TO_AS_NAME = "m_move_to"
@@ -60,6 +54,7 @@ class NavigationMummerAction(object):
 
         self.nao_ip = nao_ip
         self.nao_port = nao_port
+        self.al_motion_mtx = Lock()
         self.al_motion = ALProxy("ALMotion", nao_ip, nao_port)
         #self.al_proxy = ALProxy.
 
@@ -153,12 +148,13 @@ class NavigationMummerAction(object):
         ))
         if self.need_final_rotation and abs(((yaw - yaw_r) + math.pi) % math.pi * 2 - math.pi) > -1:
             rospy.loginfo(NODE_NAME + " now doing final rotation")
-            try:
-                self.al_motion.moveTo(0, 0, yaw)
-            except RuntimeError as e:
-                rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
-                self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
-                self.al_motion.moveTo(0, 0, yaw)
+            with self.al_motion_mtx:
+                try:
+                    self.al_motion.moveTo(0, 0, yaw)
+                except RuntimeError as e:
+                    rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
+                    self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
+                    self.al_motion.moveTo(0, 0, yaw)
 
         self.need_final_rotation = False
 
@@ -281,11 +277,12 @@ class NavigationMummerAction(object):
         if abs(t.euler_from_quaternion(robot_r)[2] - (math.pi + math.atan2(
                     robot_t[1], robot_t[0]))) > 0.2:
             rospy.loginfo(NODE_NAME + " Go to final oriantation")
-            try:
-                self.al_motion.moveTo(0, 0, math.pi + math.atan2(
-                    robot_t[1], robot_t[0]))
-            except RuntimeError as e:
-                self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
+            with self.al_motion_mtx:
+                try:
+                    self.al_motion.moveTo(0, 0, math.pi + math.atan2(
+                        robot_t[1], robot_t[0]))
+                except RuntimeError as e:
+                    self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
 
         end_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
         if self.move_to_fact_id is not None:
