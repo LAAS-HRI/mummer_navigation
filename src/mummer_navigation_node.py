@@ -21,6 +21,7 @@ from multiprocessing import Lock
 NODE_NAME = "mummer_navigation_node"
 MOVE_TO_AS_NAME = "m_move_to"
 APPROACH_AS_NAME = "m_approach"
+ROTATE_AS_NAME = "m_rotate"
 
 MOVE_BASE_AS_NAME = "move_base"
 
@@ -46,6 +47,7 @@ class NavigationMummerAction(object):
         rospy.loginfo(NODE_NAME + " found underworlds stop fact service server.")
         self.move_to_fact_id = None
         self.approach_fact_id = None
+        self.rotate_fact_id = None
 
         rospy.loginfo(NODE_NAME + " waiting for multimodal human monitor service.")
         rospy.wait_for_service(TOGGLE_HUMAN_MONITORING_SRV)
@@ -77,6 +79,12 @@ class NavigationMummerAction(object):
                                                         execute_cb=self.execute_approach_cb, auto_start=False)
         self._feedback_approach = None
         self.as_approach.start()
+
+        self.as_rotate = actionlib.SimpleActionServer(ROTATE_AS_NAME, RotateAction,
+                                                        execute_cb=self.execute_rotate_cb, auto_start=False)
+        self._feedback_rotate = None
+        self.as_rotate.start()
+
         rospy.loginfo(NODE_NAME + " server started.")
 
     def execute_move_to_cb(self, goal):
@@ -308,6 +316,48 @@ class NavigationMummerAction(object):
             pass
         elif state == GoalStatus.ABORTED:
             self.as_approach.set_aborted(result)
+
+
+#================================================
+
+    def execute_rotate_cb(self, goal):
+        """
+
+        :param goal:
+        :type goal: RotateGoal
+        :return:
+        """
+        q = [goal.rotation.quaternion.x, goal.rotation.quaternion.y, goal.rotation.quaternion.z, goal.rotation.quaternion.w]
+        t_r, r_r = self.tf_listener.lookupTransform("map", "base_footprint", rospy.Time(0))
+        delta_rot = t.quaternion_multiply(q, t.quaternion_inverse(r_r))
+        _, _, goal_angle = t.euler_from_quaternion(q)
+        _, _, delta_angle = t.euler_from_quaternion(delta_rot)
+        _, _, current_angle = t.euler_from_quaternion(r_r)
+        rospy.logdebug("{} : Rotating to {}, delta : {}, current : {}.".format(NODE_NAME, goal_angle, delta_angle, current_angle))
+
+        begin_fact = rospy.ServiceProxy(START_FACT_SRV_NAME, StartFact)
+        resp = begin_fact("base", "isMoving(robot)", rospy.Time.now().to_sec(), False)
+        if resp.success:
+            self.move_to_fact_id = resp.fact_id
+        with self.al_motion_mtx:
+            try:
+                self.al_motion.moveTo(0, 0, delta_angle)
+            except RuntimeError as e:
+                rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
+                self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
+                self.al_motion.moveTo(0, 0, delta_angle)
+
+        rospy.logdebug("{} : translation : {}\trotation : {}".format(NODE_NAME, t_r, r_r))
+        rospy.logdebug("{} : Ending rotation.".format(NODE_NAME))
+
+        end_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
+        if self.move_to_fact_id is not None:
+            resp = end_fact("base", self.move_to_fact_id)
+            if resp.success:
+                self.move_to_fact_id = None
+
+        self.as_rotate.set_succeeded()
+
 
 server = None
 
