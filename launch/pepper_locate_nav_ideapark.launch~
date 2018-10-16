@@ -1,0 +1,5 @@
+<launch>
+	<include file="$(find laas_navigation)/pepper_launch/pepper_locate.launch"/>
+	<include file="$(find mummer_navigation)/launch/pepper_nav.launch" />
+</launch>
+	

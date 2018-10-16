@@ -1,0 +1,20 @@
+<launch>
+  <env name="PYTHONPATH" value="$(env PYTHONPATH)" />
+  <arg name="nao_ip" default="$(optenv NAO_IP pepper)" />
+  <arg name="nao_port" default="$(optenv NAO_PORT 9559)" />
+
+  <!-- start pepper drivers -->
+  <!--<include file="$(find laas_navigation)/pepper_launch/pepper.launch"/>-->
+
+  <!-- localization on pepper robot, NOTE: run loading_map before running this -->
+
+
+  <!-- map server -->
+  <!--<node pkg="tf" type="static_transform_publisher" name="map_transform"
+    args="7.928729 5.890381 0 1.57 0 0 /map_nav /map 100"/>-->
+  <!--<node pkg="tf" type="static_transform_publisher" name="fixed_odom_transform"
+    args="3.5 6.0 0 0 0 0 /map /odom 100"/> -->
+  <!-- <node name="map_server" pkg="map_server" type="map_server" args="$(find laas_navigation)/maps/laas_adream_simplified.yaml">-->
+    <param name="frame_id" value="/map"/>
+  </node>
+</launch>

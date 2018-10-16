@@ -1,0 +1,15 @@
+<launch>
+  <!-- start map_server with laas_adream map -->
+  <node name="map_server" pkg="map_server" type="map_server" args="$(find ideapark_description)/maps/ideapark.yaml"/>
+
+  <!--<node pkg="tf" type="static_transform_publisher" name="map_odom_transform"
+    args="2 2 0.76 0 0 0 /map /odom 20"/> />
+
+  <!-- start acml for localization -->
+  <!--<node name="amcl" pkg="amcl" type="amcl">-->
+    <!-- <remap from="scan" to="base_scan"/>-->
+    <!--<param name="initial_pose_x" value="2.0"/>
+    <param name="initial_pose_y" value="2.0"/>
+    <param name="initial_pose_a" value="0.0"/>
+  </node> -->
+</launch>
