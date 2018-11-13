@@ -184,6 +184,11 @@ class NavigationMummerAction(object):
         #time.sleep(1.0)
 
         self.as_move_to.set_succeeded()
+        end_nav_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
+        if self.move_to_fact_id is not None:
+            resp = end_nav_fact("base", self.move_to_fact_id)
+            if resp.success:
+                self.move_to_fact_id = None
         rospy.loginfo(NODE_NAME + " Action server succeeded !")
 
         resp = self.toggle_human_monitor(True)
@@ -193,11 +198,12 @@ class NavigationMummerAction(object):
         self._feedback_move_to = feedback
 
     def done_move_to_cb(self, state, result):
-        end_nav_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
-        if self.move_to_fact_id is not None:
-            resp = end_nav_fact("base", self.move_to_fact_id)
-            if resp.success:
-                self.move_to_fact_id = None
+        pass
+        # end_nav_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
+        # if self.move_to_fact_id is not None:
+        #     resp = end_nav_fact("base", self.move_to_fact_id)
+        #     if resp.success:
+        #         self.move_to_fact_id = None
         # if state == GoalStatus.PREEMPTED:
         #     self.as_move_to.set_preempted(result)
         # elif state == GoalStatus.SUCCEEDED:
@@ -226,8 +232,10 @@ class NavigationMummerAction(object):
         robot_t_map, robot_r_map = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
         human_t, human_r = self.tf_listener.lookupTransform(goal.target_pose.header.frame_id, MAP_FRAME, rospy.Time(0))
         if d <= 0.1:
-            d = 0.8
-            a = math.atan2(human_t[1] - robot_t_map[1], human_t[0] - robot_t_map[0])
+            d = 1.0
+            # a = math.atan2(human_t[1] - robot_t_map[1], human_t[0] - robot_t_map[0])
+            _, _, a = t.euler_from_quaternion(human_r)
+            # a = 0
             goal.target_pose.pose.position.x = d
             goal.target_pose.pose.position.y = 0
             goal.target_pose.pose.position.z = 0
@@ -243,10 +251,11 @@ class NavigationMummerAction(object):
         goal_2d.target_pose.pose.orientation.x, goal_2d.target_pose.pose.orientation.y, \
             goal_2d.target_pose.pose.orientation.z, goal_2d.target_pose.pose.orientation.w = t.quaternion_from_euler(0.0,
                                                                                                                  0.0, a)
-
-        self._move_base_as_recfg_client.update_configuration({"use_human_robot_visi_c": True, "planning_mode": 2,
+        # print("angle wanted: {}".format(a))
+        self._move_base_as_recfg_client.update_configuration({"use_human_robot_visi_c": False, "planning_mode": 2,
                                                               "approach_id": id, "approach_dist": d,
-                                                              "approach_angle": a, "yaw_goal_tolerance": 0.1, "xy_goal_tolerance": 0.5})
+                                                              "approach_angle": 3.14, "yaw_goal_tolerance": 0.1, "xy_goal_tolerance": 0.5,
+                                                              "approach_dist_tolerance": 0.5})
 
         resp = self.toggle_human_monitor(False)
         if not resp.success:
