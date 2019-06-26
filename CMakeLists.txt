@@ -9,11 +9,12 @@ project(mummer_navigation)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
-  hanp_msgs
   rospy
   move_base_msgs
   actionlib
   actionlib_msgs
+  pepper_base_manager_msgs
+  pepper_resources_synchronizer_msgs
 )
 
 ## System dependencies are found with CMake's conventions

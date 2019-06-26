@@ -13,8 +13,9 @@ from actionlib_msgs.msg import GoalStatus
 from geometry_msgs.msg import Twist, PoseStamped
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from mummer_navigation.msg import RotateGoal, RotateAction
-from naoqi import ALProxy
-from perspectives_msgs.srv import StartFact, EndFact
+from pepper_base_manager_msgs.msg import StateMachineStatePrioritizedAngle
+from resource_management_msgs.msg import StateMachineTransition
+from pepper_resources_synchronizer_msgs.srv import MetaStateMachineRegister
 from std_srvs.srv import SetBool
 from multiprocessing import Lock
 
@@ -29,6 +30,8 @@ START_FACT_SRV_NAME = "/uwds_ros_bridge/start_fact"
 STOP_FACT_SRV_NAME = "/uwds_ros_bridge/end_fact"
 
 TOGGLE_HUMAN_MONITORING_SRV = "/multimodal_human_monitor/global_monitoring"
+
+REGISTER_PEPPER_SYNC = "/pepper_resources_synchronizer/state_machines_register"
 
 REGEX_FRAME_TO_HUMAN_ID = "(?:mocap_)?human-([0-9]+)(_footprint)?"
 
@@ -49,27 +52,27 @@ def center_radians(a):
 
 class NavigationMummerAction(object):
     def __init__(self, nao_ip, nao_port):
-        self.cmd_vel_topic = rospy.Publisher(CMD_VEL_TOPIC, Twist, queue_size=100)
+        #self.cmd_vel_topic = rospy.Publisher(CMD_VEL_TOPIC, Twist, queue_size=100)
         self.move_base_as = actionlib.SimpleActionClient(MOVE_BASE_AS_NAME, MoveBaseAction)
-        rospy.loginfo(NODE_NAME + " waiting for underworlds start fact service server.")
-        rospy.wait_for_service(START_FACT_SRV_NAME)
-        rospy.loginfo(NODE_NAME + " found underworlds start fact service server.")
-        rospy.loginfo(NODE_NAME + " waiting for underworlds stop fact service server.")
-        rospy.wait_for_service(STOP_FACT_SRV_NAME)
-        rospy.loginfo(NODE_NAME + " found underworlds stop fact service server.")
+        #rospy.loginfo(NODE_NAME + " waiting for underworlds start fact service server.")
+        #rospy.wait_for_service(START_FACT_SRV_NAME)
+        #rospy.loginfo(NODE_NAME + " found underworlds start fact service server.")
+        #rospy.loginfo(NODE_NAME + " waiting for underworlds stop fact service server.")
+        #rospy.wait_for_service(STOP_FACT_SRV_NAME)
+        #rospy.loginfo(NODE_NAME + " found underworlds stop fact service server.")
         self.move_to_fact_id = None
         self.approach_fact_id = None
         self.rotate_fact_id = None
 
-        rospy.loginfo(NODE_NAME + " waiting for multimodal human monitor service.")
-        rospy.wait_for_service(TOGGLE_HUMAN_MONITORING_SRV)
-        rospy.loginfo(NODE_NAME + " found multimodal human monitor service.")
+        # rospy.loginfo(NODE_NAME + " waiting for multimodal human monitor service.")
+        # rospy.wait_for_service(TOGGLE_HUMAN_MONITORING_SRV)
+        # rospy.loginfo(NODE_NAME + " found multimodal human monitor service.")
         self.toggle_human_monitor = rospy.ServiceProxy(TOGGLE_HUMAN_MONITORING_SRV, SetBool)
 
-        self.nao_ip = nao_ip
-        self.nao_port = nao_port
-        self.al_motion_mtx = Lock()
-        self.al_motion = ALProxy("ALMotion", nao_ip, nao_port)
+        # self.nao_ip = nao_ip
+        # self.nao_port = nao_port
+        # self.al_motion_mtx = Lock()
+        # self.al_motion = ALProxy("ALMotion", nao_ip, nao_port)
         #self.al_proxy = ALProxy.
 
         self.tf_listener = tf.TransformListener()
@@ -77,7 +80,7 @@ class NavigationMummerAction(object):
         rospy.loginfo(NODE_NAME + " waiting for move_base action server.")
         self.move_base_as.wait_for_server()
         rospy.loginfo(NODE_NAME + " found move_base action server.")
-        self._move_base_as_recfg_client = dyncfg.Client("/move_base_node/TebLocalPlannerROS")
+        self._move_base_as_recfg_client = dyncfg.Client("/move_base/TebLocalPlannerROS")
         self.as_move_to = actionlib.SimpleActionServer(MOVE_TO_AS_NAME, MoveBaseAction,
                                                        execute_cb=self.execute_move_to_cb, auto_start=False)
         self.need_final_rotation = False
@@ -97,13 +100,15 @@ class NavigationMummerAction(object):
         self._feedback_rotate = None
         self.as_rotate.start()
 
+        self.register_pepper_sync = rospy.ServiceProxy(REGISTER_PEPPER_SYNC, MetaStateMachineRegister)
+
         rospy.loginfo(NODE_NAME + " server started.")
+
+        self.running = False
 
     def execute_move_to_cb(self, goal):
         # helper variables
-        self._move_base_as_recfg_client.update_configuration({"use_human_robot_visi_c": False, "planning_mode": 1,
-                                                              "use_human_robot_ttc_c": False,
-                                                              "yaw_goal_tolerance": 0.5, "xy_goal_tolerance": 0.5})
+        #self._move_base_as_recfg_client.update_configuration({"yaw_goal_tolerance": 0.5, "xy_goal_tolerance": 0.5})
 
         if goal.target_pose.header.frame_id != MAP_FRAME:
             goal.target_pose = self.tf_listener.transformPose(MAP_FRAME, goal.target_pose)
@@ -122,83 +127,86 @@ class NavigationMummerAction(object):
         goal_2d.target_pose.pose.orientation.w = w2d
 
 
-        resp = self.toggle_human_monitor(False)
-        if not resp.success:
-            rospy.logwarn(NODE_NAME + " could not stop human monitoring, returning failure.")
-            self.as_move_to.set_aborted(text="Could not stop monitoring")
-            return
+        # resp = self.toggle_human_monitor(False)
+        # if not resp.success:
+        #     rospy.logwarn(NODE_NAME + " could not stop human monitoring, returning failure.")
+        #     self.as_move_to.set_aborted(text="Could not stop monitoring")
+        #     return
 
-        begin_nav_fact = rospy.ServiceProxy(START_FACT_SRV_NAME, StartFact)
-        resp = begin_nav_fact("base", "isNavigating(robot)", rospy.Time.now().to_sec(), False)
-        if resp.success:
-            self.move_to_fact_id = resp.fact_id
+        #begin_nav_fact = rospy.ServiceProxy(START_FACT_SRV_NAME, StartFact)
+        #resp = begin_nav_fact("base", "isNavigating(robot)", rospy.Time.now().to_sec(), False)
+        #if resp.success:
+        #    self.move_to_fact_id = resp.fact_id
 
 
+        self.running = True
         self.move_base_as.send_goal(goal_2d, done_cb=self.done_move_to_cb, feedback_cb=self.feedback_move_to_cb)
 
-        r_pose, _ = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
-        last_distance = math.hypot(goal_2d.target_pose.pose.position.x - r_pose[0],
-                                   goal_2d.target_pose.pose.position.y - r_pose[1])
-        last_decrease_time = rospy.Time.now()
-        while self.move_base_as.get_state() == GoalStatus.ACTIVE or self.move_base_as.get_state() == GoalStatus.PENDING:
+        #r_pose, _ = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
+        #last_distance = math.hypot(goal_2d.target_pose.pose.position.x - r_pose[0],
+        #                           goal_2d.target_pose.pose.position.y - r_pose[1])
+        #last_decrease_time = rospy.Time.now()
+        while self.running:
             if self.as_move_to.is_preempt_requested():
                 self.as_move_to.set_preempted()
                 self.move_base_as.cancel_all_goals()
-                break
-            r_pose, _ = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
-            d = math.hypot(goal_2d.target_pose.pose.position.x - r_pose[0],
-                            goal_2d.target_pose.pose.position.y - r_pose[1])
-            rospy.loginfo_throttle(1, "[mummer_navigation] distance : {}, old_distance : {}".format(d, last_distance))
-            if d < last_distance:
-                last_decrease_time = rospy.Time.now()
-                last_distance = d
-            elif rospy.Time.now() - last_decrease_time >= rospy.Duration(900000):
-                self.move_base_as.cancel_all_goals()
-                self.need_final_rotation = True
-                break
+                self.running = False
+                return
+            #r_pose, _ = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
+            #d = math.hypot(goal_2d.target_pose.pose.position.x - r_pose[0],
+            #                goal_2d.target_pose.pose.position.y - r_pose[1])
+            #rospy.loginfo_throttle(1, "[mummer_navigation] distance : {}, old_distance : {}".format(d, last_distance))
+            #if d < last_distance:
+            #    last_decrease_time = rospy.Time.now()
+            #    last_distance = d
+            #elif rospy.Time.now() - last_decrease_time >= rospy.Duration(900000):
+            #    self.move_base_as.cancel_all_goals()
+            #    self.need_final_rotation = True
+            #    break
             if self._feedback_move_to is not None:
                 self.as_move_to.publish_feedback(self._feedback_move_to)
             self._feedback_rate.sleep()
 
-        robot_t, robot_r = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
-        diff = t.quaternion_multiply([x2d, y2d, z2d, w2d], t.quaternion_inverse(robot_r))
-        _, _, yaw_r = t.euler_from_quaternion(robot_r)
-        _, _, yaw_diff = t.euler_from_quaternion(diff)
-        self.need_final_rotation = True
-        rospy.loginfo(NODE_NAME + " final rotation needed : {}, angle wanted : {}, angle : {}, diff : {}".format(
-            self.need_final_rotation, yaw, yaw_r, yaw_diff
-        ))
+        #robot_t, robot_r = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
+        #diff = t.quaternion_multiply([x2d, y2d, z2d, w2d], t.quaternion_inverse(robot_r))
+        #_, _, yaw_r = t.euler_from_quaternion(robot_r)
+        #_, _, yaw_diff = t.euler_from_quaternion(diff)
+        #self.need_final_rotation = True
+        #rospy.loginfo(NODE_NAME + " final rotation needed : {}, angle wanted : {}, angle : {}, diff : {}".format(
+        #    self.need_final_rotation, yaw, yaw_r, yaw_diff
+        #))
         #if self.need_final_rotation: #and abs(((yaw - yaw_r) + math.pi) % math.pi * 2 - math.pi) > -1:
 
-        with self.al_motion_mtx:
-            try:
-                rospy.loginfo(NODE_NAME + " now doing final rotation")
-                self.al_motion.moveTo(0, 0, yaw_diff)
-            except RuntimeError as e:
-                rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
-                self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
-                self.al_motion.moveTo(0, 0, yaw_diff)
+        #with self.al_motion_mtx:
+        #    try:
+        #        rospy.loginfo(NODE_NAME + " now doing final rotation")
+        #        self.al_motion.moveTo(0, 0, yaw_diff)
+        #    except RuntimeError as e:
+        #        rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
+        #        self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
+        #        self.al_motion.moveTo(0, 0, yaw_diff)
 
-        self.need_final_rotation = False
+        #self.need_final_rotation = False
 
         #time.sleep(1.0)
 
-        self.as_move_to.set_succeeded()
-        end_nav_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
-        if self.move_to_fact_id is not None:
-            resp = end_nav_fact("base", self.move_to_fact_id)
-            if resp.success:
-                self.move_to_fact_id = None
-        rospy.loginfo(NODE_NAME + " Action server succeeded !")
+        #end_nav_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
+        #if self.move_to_fact_id is not None:
+        #    resp = end_nav_fact("base", self.move_to_fact_id)
+        #    if resp.success:
+        #        self.move_to_fact_id = None
 
-        resp = self.toggle_human_monitor(True)
+
+        # resp = self.toggle_human_monitor(True)
 
 
     def feedback_move_to_cb(self, feedback):
         self._feedback_move_to = feedback
 
     def done_move_to_cb(self, state, result):
-        pass
+        self.as_move_to.set_succeeded()
+        self.running = False
+        rospy.loginfo(NODE_NAME + " Action server succeeded !")
         # end_nav_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
         # if self.move_to_fact_id is not None:
         #     resp = end_nav_fact("base", self.move_to_fact_id)
@@ -221,7 +229,7 @@ class NavigationMummerAction(object):
         :type goal: MoveBaseGoal
         :return:
         """
-
+	return
         match = self.regex_frame_to_human_id.match(goal.target_pose.header.frame_id)
         id = int(match.group(1))
         # if match.group(2) is None:
@@ -257,7 +265,7 @@ class NavigationMummerAction(object):
                                                               "approach_angle": 3.14, "yaw_goal_tolerance": 0.1, "xy_goal_tolerance": 0.5,
                                                               "approach_dist_tolerance": 0.5})
 
-        resp = self.toggle_human_monitor(False)
+        # resp = self.toggle_human_monitor(False)
         if not resp.success:
             rospy.logwarn(NODE_NAME + " could not stop human monitoring, returning failure.")
             self.as_approach.set_aborted(text="Could not stop monitoring")
@@ -330,7 +338,7 @@ class NavigationMummerAction(object):
 
         self.as_approach.set_succeeded()
 
-        self.toggle_human_monitor(True)
+        # self.toggle_human_monitor(True)
 
     def feedback_approach_cb(self, feedback):
         self._feedback_approach = feedback
@@ -368,28 +376,50 @@ class NavigationMummerAction(object):
         # rospy.loginfo("{} : Rotating to {}, delta : {}, current : {}.".format(NODE_NAME, goal_angle, delta_angle, current_angle))
 
         _, _, delta_angle = t.euler_from_quaternion(q)
+        
+        r = MetaStateMachineRegister()
+        fsm = StateMachineStatePrioritizedAngle()
+        tra = StateMachineTransition()
+        tra.next_state = "end"
+        tra.end_condition.timeout = rospy.Duration(-1)
+        tra.end_condition.duration = rospy.Duration(-1)
+        tra.end_condition.regex_end_condition.append("__done__")
+        fsm.data = delta_angle
+        fsm.header.id = "rotate"
+        fsm.header.transitions.append(tra)
+        r.request.header.initial_state = "rotate"
+        r.request.header.timeout = rospy.Duration(-1)
+        r.request.header.begin_dead_line = rospy.Time.now() + rospy.Duration(5)
+        r.request.header.priority.value = r.priority.urgent
+        r.request.state_machine_pepper_base_manager = fsm
+
+        self.register_pepper_sync.call(r)
+
+        
+        
+        
 
 
-        begin_fact = rospy.ServiceProxy(START_FACT_SRV_NAME, StartFact)
-        resp = begin_fact("base", "isMoving(robot)", rospy.Time.now().to_sec(), False)
-        if resp.success:
-            self.move_to_fact_id = resp.fact_id
-        with self.al_motion_mtx:
-            try:
-                self.al_motion.moveTo(0, 0, delta_angle)
-            except RuntimeError as e:
-                rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
-                self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
-                self.al_motion.moveTo(0, 0, delta_angle)
+        #begin_fact = rospy.ServiceProxy(START_FACT_SRV_NAME, StartFact)
+        #resp = begin_fact("base", "isMoving(robot)", rospy.Time.now().to_sec(), False)
+        #if resp.success:
+        #    self.move_to_fact_id = resp.fact_id
+        #with self.al_motion_mtx:
+        #    try:
+        #        self.al_motion.moveTo(0, 0, delta_angle)
+        #    except RuntimeError as e:
+        #        rospy.logwarn(NODE_NAME + " MoveTo crash ! Retrying...")
+        #        self.al_motion = ALProxy("ALMotion", self.nao_ip, self.nao_port)
+        #        self.al_motion.moveTo(0, 0, delta_angle)
 
         #rospy.logdebug("{} : translation : {}\trotation : {}".format(NODE_NAME, t_r, r_r))
         #rospy.logdebug("{} : Ending rotation.".format(NODE_NAME))
 
-        end_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
-        if self.move_to_fact_id is not None:
-            resp = end_fact("base", self.move_to_fact_id)
-            if resp.success:
-                self.move_to_fact_id = None
+        #end_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
+        #if self.move_to_fact_id is not None:
+        #    resp = end_fact("base", self.move_to_fact_id)
+        #    if resp.success:
+        #        self.move_to_fact_id = None
 
         self.as_rotate.set_succeeded()
 
@@ -401,7 +431,7 @@ def on_sigint(*_):
     server.as_approach.set_preempted()
     server.as_move_to.set_preempted()
     server.move_base_as.cancel_all_goals()
-    server.toggle_human_monitor(True)
+    # server.toggle_human_monitor(True)
     msg = Twist()
     server.cmd_vel_topic.publish(msg)  # Stop the robot
     end_fact = rospy.ServiceProxy(STOP_FACT_SRV_NAME, EndFact)
