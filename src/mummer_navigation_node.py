@@ -120,6 +120,7 @@ class NavigationMummerAction(object):
         roll, pitch, yaw = t.euler_from_quaternion((goal.target_pose.pose.orientation.x, goal.target_pose.pose.orientation.y,
                                  goal.target_pose.pose.orientation.z, goal.target_pose.pose.orientation.w))
         x2d, y2d, z2d, w2d = t.quaternion_from_euler(0, 0, yaw)
+        rospy.loginfo("goal : {}".format(goal_2d.target_pose.pose.position))
         rospy.loginfo("roll, pitch, yaw : {}\tquaternion2d : {}".format((roll, pitch, yaw), (x2d, y2d, z2d, w2d)))
         goal_2d.target_pose.pose.orientation.x = x2d
         goal_2d.target_pose.pose.orientation.y = y2d
