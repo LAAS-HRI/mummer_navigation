@@ -109,7 +109,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES mummer_navigation
-#  CATKIN_DEPENDS geometry_msgs hanp_msgs navigation_msgs rospy
+  CATKIN_DEPENDS pepper_resources_synchronizer_msgs geometry_msgs navigation_msgs rospy
 #  DEPENDS system_lib
 )
 
@@ -120,7 +120,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+ #include
   ${catkin_INCLUDE_DIRS}
 )
 

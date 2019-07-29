@@ -63,6 +63,7 @@
   <exec_depend>rospy</exec_depend>
   <exec_depend>actionlib</exec_depend>
   <exec_depend>actionlib_msgs</exec_depend>
+  <depend>pepper_resources_synchronizer_msgs</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->
