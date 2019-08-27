@@ -18,12 +18,13 @@ from resource_management_msgs.msg import StateMachineTransition
 from pepper_resources_synchronizer_msgs.srv import MetaStateMachineRegister
 from std_srvs.srv import SetBool
 from multiprocessing import Lock
+#from std_msgs.msg import Bool
 
 NODE_NAME = "mummer_navigation_node"
 MOVE_TO_AS_NAME = "m_move_to"
 APPROACH_AS_NAME = "m_approach"
 ROTATE_AS_NAME = "m_rotate"
-
+#INFEASIBLE_TRAJ_NAME = "/move_base/TebLocalPlannerROS/Infeasible_plans"
 MOVE_BASE_AS_NAME = "move_base"
 
 START_FACT_SRV_NAME = "/uwds_ros_bridge/start_fact"
@@ -103,6 +104,7 @@ class NavigationMummerAction(object):
         self.register_pepper_sync = rospy.ServiceProxy(REGISTER_PEPPER_SYNC, MetaStateMachineRegister)
 
         rospy.loginfo(NODE_NAME + " server started.")
+        #rospy.Subscriber(INFEASIBLE_TRAJ_NAME, Bool, self.no_plan_cb)
 
         self.running = False
 
@@ -200,6 +202,10 @@ class NavigationMummerAction(object):
 
         # resp = self.toggle_human_monitor(True)
 
+    def no_plan_cb(self, no_plan):
+        if(no_plan):
+            rospy.loginfo("Stopping the present goal due to infeasible trajectory");
+            self.move_base_as.cancel_all_goals()
 
     def feedback_move_to_cb(self, feedback):
         self._feedback_move_to = feedback
@@ -377,7 +383,7 @@ class NavigationMummerAction(object):
         # rospy.loginfo("{} : Rotating to {}, delta : {}, current : {}.".format(NODE_NAME, goal_angle, delta_angle, current_angle))
 
         _, _, delta_angle = t.euler_from_quaternion(q)
-        
+
         r = MetaStateMachineRegister()
         fsm = StateMachineStatePrioritizedAngle()
         tra = StateMachineTransition()
@@ -396,9 +402,9 @@ class NavigationMummerAction(object):
 
         self.register_pepper_sync.call(r)
 
-        
-        
-        
+
+
+
 
 
         #begin_fact = rospy.ServiceProxy(START_FACT_SRV_NAME, StartFact)
@@ -451,5 +457,3 @@ if __name__ == '__main__':
     server.as_approach.set_preempted()
     msg = Twist()
     server.cmd_vel_topic.publish(msg)  # Stop the robot
-
-
