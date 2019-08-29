@@ -11,11 +11,12 @@ import tf
 import tf.transformations as t
 from actionlib_msgs.msg import GoalStatus
 from geometry_msgs.msg import Twist, PoseStamped
-from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal,MoveBaseActionResult
 from mummer_navigation.msg import RotateGoal, RotateAction
 from pepper_base_manager_msgs.msg import StateMachineStatePrioritizedAngle
 from resource_management_msgs.msg import StateMachineTransition
 from pepper_resources_synchronizer_msgs.srv import MetaStateMachineRegister
+from nao_interaction_msgs.srv import MotionSetAngles,MotionSetAnglesRequest
 from std_srvs.srv import SetBool
 from multiprocessing import Lock
 #from std_msgs.msg import Bool
@@ -31,6 +32,7 @@ START_FACT_SRV_NAME = "/uwds_ros_bridge/start_fact"
 STOP_FACT_SRV_NAME = "/uwds_ros_bridge/end_fact"
 
 TOGGLE_HUMAN_MONITORING_SRV = "/multimodal_human_monitor/global_monitoring"
+NAOAI_JNT_SRV = "/naoqi_driver/motion/set_angles"
 
 REGISTER_PEPPER_SYNC = "/pepper_resources_synchronizer/state_machines_register"
 
@@ -69,6 +71,8 @@ class NavigationMummerAction(object):
         # rospy.wait_for_service(TOGGLE_HUMAN_MONITORING_SRV)
         # rospy.loginfo(NODE_NAME + " found multimodal human monitor service.")
         self.toggle_human_monitor = rospy.ServiceProxy(TOGGLE_HUMAN_MONITORING_SRV, SetBool)
+        self.go_to_stable_posture = rospy.ServiceProxy(NAOAI_JNT_SRV, MotionSetAngles)
+        self.check_goal = rospy.Subscriber("/move_base/result",MoveBaseActionResult,self.go_to_posture_cb)
 
         # self.nao_ip = nao_ip
         # self.nao_port = nao_port
@@ -143,7 +147,10 @@ class NavigationMummerAction(object):
 
 
         self.running = True
+        # rospy.info(self.move_base_as.status_list)
         self.move_base_as.send_goal(goal_2d, done_cb=self.done_move_to_cb, feedback_cb=self.feedback_move_to_cb)
+        # self.go_to_stable_posture(["HipPitch","HipRoll","KneePitch"], [-0.071,0,-0.01], 0.1)
+
 
         #r_pose, _ = self.tf_listener.lookupTransform(MAP_FRAME, FOOTPRINT_FRAME, rospy.Time(0))
         #last_distance = math.hypot(goal_2d.target_pose.pose.position.x - r_pose[0],
@@ -206,6 +213,12 @@ class NavigationMummerAction(object):
         if(no_plan):
             rospy.loginfo("Stopping the present goal due to infeasible trajectory");
             self.move_base_as.cancel_all_goals()
+
+    def go_to_posture_cb(self,msg):
+        if msg.status.status == 3 or msg.status.status == 4 or msg.status.status == 9:
+            time.sleep(2)
+            # req = MotionSetAnglesRequest(["HipPitch","HipRoll","KneePitch"], [-0.071,0.0,0.0], 0.1)
+            self.go_to_stable_posture(["HipPitch","HipRoll","KneePitch"], [-0.071,0.0,0.0], 0.1)
 
     def feedback_move_to_cb(self, feedback):
         self._feedback_move_to = feedback
