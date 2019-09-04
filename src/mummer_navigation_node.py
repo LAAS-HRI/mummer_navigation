@@ -217,8 +217,7 @@ class NavigationMummerAction(object):
     def go_to_posture_cb(self,msg):
         if msg.status.status == 3 or msg.status.status == 4 or msg.status.status == 9:
             time.sleep(2)
-            # req = MotionSetAnglesRequest(["HipPitch","HipRoll","KneePitch"], [-0.071,0.0,0.0], 0.1)
-            self.go_to_stable_posture(["HipPitch","HipRoll","KneePitch"], [-0.071,0.0,0.0], 0.1)
+            self.go_to_stable_posture(["HipPitch","HipRoll","KneePitch"], [-0.101,-0.001,0.0], 0.1)
 
     def feedback_move_to_cb(self, feedback):
         self._feedback_move_to = feedback
