@@ -17,7 +17,7 @@ from pepper_base_manager_msgs.msg import StateMachineStatePrioritizedAngle
 from resource_management_msgs.msg import StateMachineTransition
 from pepper_resources_synchronizer_msgs.srv import MetaStateMachineRegister
 from nao_interaction_msgs.srv import MotionSetAngles,MotionSetAnglesRequest
-from std_srvs.srv import SetBool
+from std_srvs.srv import SetBool,Empty
 from multiprocessing import Lock
 #from std_msgs.msg import Bool
 
@@ -32,7 +32,7 @@ START_FACT_SRV_NAME = "/uwds_ros_bridge/start_fact"
 STOP_FACT_SRV_NAME = "/uwds_ros_bridge/end_fact"
 
 TOGGLE_HUMAN_MONITORING_SRV = "/multimodal_human_monitor/global_monitoring"
-NAOAI_JNT_SRV = "/naoqi_driver/motion/set_angles"
+NAOAI_JNT_SRV = "/naoqi_driver/motion/neutral"
 
 REGISTER_PEPPER_SYNC = "/pepper_resources_synchronizer/state_machines_register"
 
@@ -71,7 +71,7 @@ class NavigationMummerAction(object):
         # rospy.wait_for_service(TOGGLE_HUMAN_MONITORING_SRV)
         # rospy.loginfo(NODE_NAME + " found multimodal human monitor service.")
         self.toggle_human_monitor = rospy.ServiceProxy(TOGGLE_HUMAN_MONITORING_SRV, SetBool)
-        self.go_to_stable_posture = rospy.ServiceProxy(NAOAI_JNT_SRV, MotionSetAngles)
+        self.go_to_stable_posture = rospy.ServiceProxy(NAOAI_JNT_SRV, Empty)
         self.check_goal = rospy.Subscriber("/move_base/result",MoveBaseActionResult,self.go_to_posture_cb)
 
         # self.nao_ip = nao_ip
@@ -217,7 +217,9 @@ class NavigationMummerAction(object):
     def go_to_posture_cb(self,msg):
         if msg.status.status == 3 or msg.status.status == 4 or msg.status.status == 9:
             time.sleep(2)
-            self.go_to_stable_posture(["HipPitch","HipRoll","KneePitch"], [-0.101,-0.001,0.0], 0.1)
+            #name = ["Body"]
+            #angles =[0.0193678308,-0.204438269,1.24219799,0.0365650989,-1.11843324,-0.526670039,-1.03511024,0.61011523,-2.51969592e-08,-0.0573792122,-0.0442125686,1.31760716,-0.0351500735,1.37310743,0.613771081,0.806987405,0.688877523,0,0,0]
+            self.go_to_stable_posture()
 
     def feedback_move_to_cb(self, feedback):
         self._feedback_move_to = feedback
